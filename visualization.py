@@ -7,6 +7,10 @@ import constraints
 matplotlib.use("Agg")
 
 TARGET = constraints.TARGET
+x = constraints.x
+y = constraints.y
+X, Y = np.meshgrid(x, y)
+Z = constraints.Z
 
 def plot_map(X, Y, Z, individ):
     """
@@ -30,7 +34,7 @@ def plot_map(X, Y, Z, individ):
     custom_map = custom_div_cmap(250, mincol='white', midcol='0', maxcol='black')
     plt.pcolormesh(X, Y, Z, cmap=custom_map)
     plt.colorbar()
-    plt.scatter(X[TARGET[0], TARGET[1]], Y[TARGET[0], TARGET[1]], marker='s', s=20, color='black', label=Z[TARGET[0], TARGET[1]])
+    plt.scatter(X[TARGET[0], TARGET[1]], Y[TARGET[0], TARGET[1]], marker='s', s=20, color='black', label='WH= ' + str(Z[TARGET[0], TARGET[1]]))
     left, bottom, width, height = (580, 200, 900, 900)
     rect = mpatches.Rectangle((left, bottom), width, height,
                               fill=False,
@@ -63,6 +67,43 @@ def plot_map(X, Y, Z, individ):
 
     plt.legend(fontsize=9)
     plt.show()
+
+
+def example_create(Z, individ, i, label=False):
+    def custom_div_cmap(numcolors=2, name='custom_div_cmap',
+                        mincol='white', maxcol='black'):
+        from matplotlib.colors import LinearSegmentedColormap
+
+        cmap = LinearSegmentedColormap.from_list(name=name,
+                                                 colors=[mincol, maxcol],
+                                                 N=numcolors)
+        return cmap
+
+    lines_X = [points[::2] for points in individ]
+    lines_Y = [points[1:][::2] for points in individ]
+
+    if label:
+        custom_map = custom_div_cmap(250)
+        plt.pcolormesh(X, Y, Z, cmap=custom_map)
+
+    for lines_X, lines_Y in zip(lines_X, lines_Y):
+        plt.plot(lines_X,
+                 lines_Y,
+                 color='black',
+                 linewidth=3.5,
+                 marker='o')
+    plt.xlim(560, 1500)
+    plt.ylim(180, 1120)
+    plt.axes().get_yaxis().set_visible(False)
+    plt.axes().get_xaxis().set_visible(False)
+
+    if label:
+        plt.savefig('dataset/labels/' + str(i) +'.png', bbox_inches='tight', pad_inches=0)
+        plt.close()
+    else:
+        plt.savefig('dataset/targets/' + str(i) +'.png', bbox_inches='tight', pad_inches=0)
+        plt.close()
+
 
 
 def plot_binary_mask(individ):

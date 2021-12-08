@@ -1,11 +1,13 @@
 import subprocess
 import numpy as np
-from models import get_model
-from visualization import plot_map, plot_binary_mask
+from models import get_model, get_classifier_model
+from visualization import plot_binary_mask
 import constraints
 
 
+
 PIX_TARGET = [127, 106]
+THRESHOLD = 0.075
 TARGET = constraints.TARGET
 x = constraints.x
 y = constraints.y
@@ -13,35 +15,26 @@ X, Y = np.meshgrid(x, y)
 
 
 def modeling(population):
-    first_cond = 200
-    second_cond = 260
     hs_pop = []
     counter_swan = 0
+    classifier = get_classifier_model()
 
     for individ in population:
-        vectors = []
-        dist = []
-        num_of_vectors = int(len(individ) / 2) - 1
+        binary_mask = plot_binary_mask(individ)
+        pred_for_individ = classifier.predict(binary_mask.reshape(1, 224, 224))
+        print(pred_for_individ[0][0])
 
-        first = 0
-        second = 2
-        for _ in range(num_of_vectors):
-            vectors.append(individ[first:second] + individ[second:second + 2])
-            first += 2
-            second += 2
 
-        for vector in vectors:
-            dist.append(constraints.distance_to_vector(vector, TARGET))
-
-        min_dist = min(dist)[0]
-        if min_dist < first_cond or min_dist > second_cond:
-            hs_pop.append(surrogate_modeling([individ])[0])
-        else:
+        if pred_for_individ[0][0] > THRESHOLD:
             counter_swan += 1
-            hs_for_ind, _ = hs_modeling([individ])
+            _, hs_for_ind, _ = hs_modeling([individ])
             hs_pop.append(hs_for_ind[0])
 
-    return hs_pop, counter_swan
+        else:
+            _, hs_for_surr, _ = surrogate_modeling_ind(binary_mask)
+            hs_pop.append(hs_for_surr[0])
+
+    return None, hs_pop, counter_swan
 
 
 def hs_pred_func(pix):
@@ -51,19 +44,34 @@ def hs_pred_func(pix):
   return hs
 
 
+def surrogate_modeling_ind(binary_mask):
+    my_model = get_model()
+    hs_target = []
+
+    map_for_individ = my_model.predict(binary_mask.reshape(1, 224, 224))
+    #pixel = map_for_individ.reshape(224, 224, 1)[PIX_TARGET[0], PIX_TARGET[1]]
+    hs_target.append(map_for_individ[1][0][0])
+
+    return None, hs_target, 0
+
+
+
 def surrogate_modeling(population):
     my_model = get_model()
     hs_target = []
     maps = []
+    predict_class = []
+    classifier = get_classifier_model()
 
     for individ in population:
         binary_mask = plot_binary_mask(individ)
+        predict_class.append(classifier.predict(binary_mask.reshape(1, 224, 224)))
         map_for_individ = my_model.predict(binary_mask.reshape(1, 224, 224))
-        maps.append(map_for_individ)
-        pixel = map_for_individ.reshape(224, 224, 1)[PIX_TARGET[0], PIX_TARGET[1]]
-        hs_target.append(hs_pred_func(pixel)[0])
+        maps.append(map_for_individ[0])
+        hs = map_for_individ[1][0][0]
+        hs_target.append(hs)
 
-    return hs_target, maps
+    return hs_target, maps, predict_class
 
 
 def hs_modeling(population):

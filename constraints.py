@@ -4,12 +4,16 @@ from numpy.linalg import norm as euclid_norm
 "EVERYTHING ABOUT CONSIDERED DOMAIN"
 
 TARGET = [23, 40]
+PIX_TARGET = [127, 106]
 x = np.linspace(0, 2075, 84)
 y = np.linspace(0, 1450, 59)
 X, Y = np.meshgrid(x, y)
 Z = (X + 25) * (Y + 10) / (32 * (X + Y + 50))
 V1_PROH_AREA = [578, 900, 1480, 354]
 V2_PROH_AREA = [578, 800, 1480, 200]
+REV_POINT = [4.5, 0.5]
+MAX_AREA = REV_POINT[0] * REV_POINT[1]
+
 
 
 def vector_mult(vector1, vector2):

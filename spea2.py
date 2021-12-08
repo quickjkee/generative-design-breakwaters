@@ -8,6 +8,7 @@ from constraints import check_constraints
 from SWAN_modeling import hs_modeling, surrogate_modeling, modeling
 from shapely import affinity
 from shapely.geometry import LineString
+from visualization import example_create
 
 
 class SPEA2_optimizer:
@@ -545,36 +546,75 @@ class SPEA2_optimizer:
             individ = [self.create_breakwater(random.randint(self.min_segm, self.max_segm)) for _ in
                        range(number_of_bw)]
             while check_constraints(individ):
-                individ = [self.create_breakwater(random.randint(self.min_segm, self.max_segm)) for _ in
-                           range(number_of_bw)]
+                individ = [self.create_breakwater(random.randint(self.min_segm, self.max_segm)) for _ in range(number_of_bw)]
             population.append(individ)
 
         return population
 
 
-    def optimize(self, func_to_optimize, type_modeling):
+    def unique_add(self, individs):
+        unique_individs = [ind for ind in individs if ind not in self.archive]
+        _, hs_individs, counter_SWAN = hs_modeling(unique_individs)
+
+        return unique_individs, hs_individs, counter_SWAN
+
+
+    def optimize(self, init_pop, func_to_optimize, type_modeling):
+        Z_for_exp = []
+        pop_for_exp = []
+        HS = []
+
         self.functions_to_optimize = func_to_optimize
-        self.population = self.initialize_population()
-        self.archive = []
-        _, self.hs_pop, _ = type_modeling(self.population)
+        self.population = init_pop
+        #self.archive = []
+        self.archive = [[[1176, 539, 735, 828]], [[1176, 539, 735, 828], [768, 666, 1070, 321]], [[1176, 560, 850, 747], [768, 666, 1070, 321]], [[1155, 742, 953, 691]], [[1073, 674, 850, 747]], [[1176, 560, 850, 747]], [[953, 742, 1156, 709]], [[1176, 539, 626, 872]], [[1053, 842, 879, 949]], [[1073, 674, 855, 760]], [[845, 742, 1156, 709]], [[1060, 750, 844, 782]], [[1420, 827, 1284, 680]], [[909, 721, 735, 828]], [[953, 742, 1156, 692]], [[1073, 674, 735, 828]], [[845, 742, 1156, 709], [768, 666, 1070, 321]], [[1176, 560, 850, 747, 1198, 644], [768, 666, 1070, 321]], [[968, 704, 626, 872, 1221, 644], [892, 404, 585, 744]], [[968, 704, 626, 872, 1221, 644], [864, 382, 613, 766]]]
+        _, self.hs_pop, counter_SWAN = hs_modeling(self.population)
+        _, self.hs_arch, counter_SWAN = hs_modeling(self.archive)
 
-        history_arch = []
-        history_hs_arch = []
+        #Z_for_exp += Z
+        #pop_for_exp += self.population
+        counter_SWAN = 653
 
-        for i in range(self.max_iter):
-            print('Running ' + str(i + 1) + ' step of ' + str(self.max_iter))
+        arch_counter = []
+        #arch_counter.append((self.population, counter_SWAN))
+
+        number = 10
+        border = counter_SWAN + self.pop_size
+        it = 0
+
+        arch_history = []
+        while len(arch_counter) != number:
+            print('Swan calc = ' + str(counter_SWAN))
+            print('ITER = ' + str(it))
 
             union_pop = self.population + self.archive
             union_fit = self.fitness(union_pop, 'union')
             union_hs = self.hs_pop + self.hs_arch
-            self.archive, self.hs_arch = self.environmental_selection(union_pop, union_fit, union_hs)
 
-            history_hs_arch.append(self.hs_arch)
-            history_arch.append(self.archive)
+            individs_to_add, _ = self.environmental_selection(union_pop, union_fit, union_hs)
+            unique_individs, hs_individs, counter = self.unique_add(individs_to_add)
+
+
+
+            arch_history.append(self.archive)
+
+            if counter_SWAN >= border:
+                arch_counter.append((self.archive, counter_SWAN))
+                border += self.pop_size
 
             mating_pool = union_pop
             self.population = self.variation(mating_pool, union_fit)
-            _, self.hs_pop, _ = type_modeling(self.population)
-            #counter_SWAN += counter
+            _, self.hs_pop, counter = type_modeling(self.population)
 
-        return self.archive, history_arch, history_hs_arch
+            #Z_for_exp += Z
+            #pop_for_exp += self.population
+
+            counter_SWAN += counter
+            it += 1
+
+        #_ = [example_create(Z_for_exp[i], pop_for_exp[i], i, label=True) for i, __ in enumerate(Z_for_exp)]
+        #_ = [example_create(Z_for_exp[i], pop_for_exp[i], i, label=False) for i, __ in enumerate(Z_for_exp)]
+
+        #HS = [Z_for_exp[i][23,40] for i in range(len(Z_for_exp))]
+
+        return self.archive, arch_counter, it, self.population, HS

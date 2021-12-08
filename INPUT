@@ -15,7 +15,7 @@ $************ BOUNDARY CONDITIONS *********************
 BOUnd SHAPespec JONswap 3.3 PEAK DSPR DEGRees
 BOUndspec SEGMENT IJ 83 58 CON PAR 5.3 9.1 30 30
 
-OBSTACLE TRANSM 0. REFL 0. LINE 1048, 711, 1218, 858
+OBSTACLE TRANSM 0. REFL 0. LINE 1160, 785, 898, 682
 $optline
 WIND 28.1 90
 $************ OUTPUT REQUESTS *************************
