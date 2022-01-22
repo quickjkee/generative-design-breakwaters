@@ -1,19 +1,29 @@
 import numpy as np
 from numpy.linalg import norm as euclid_norm
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import Ridge
 
 "EVERYTHING ABOUT CONSIDERED DOMAIN"
 
-TARGET = [23, 40]
-PIX_TARGET = [127, 106]
+TARGET = [[32, 66], [16, 46]]
+PIX_TARGET = [[[98, 103], [176, 181]], [[[160, 165], [123, 128]]]]
+
 x = np.linspace(0, 2075, 84)
 y = np.linspace(0, 1450, 59)
 X, Y = np.meshgrid(x, y)
-Z = (X + 25) * (Y + 10) / (32 * (X + Y + 50))
-V1_PROH_AREA = [578, 900, 1480, 354]
-V2_PROH_AREA = [578, 800, 1480, 200]
-REV_POINT = [4.5, 0.5]
-MAX_AREA = REV_POINT[0] * REV_POINT[1]
+DOMAIN = [[x[0], x[-1]],
+          [y[0], y[-1]]]
+Z = ((X + 25) * (Y + 10) / (32 * (X + Y + 50)) + 25) / 4
+V_PROH_AREA = [[1000, 100, 700, 600], [700, 600, 800, 800], [1900, 540, 1750, 1000]]
 
+gp = make_pipeline(PolynomialFeatures(3), Ridge(alpha=1e-1))
+x_fit = np.array([x[0], x[-1]]).reshape(-1, 1)
+y_fit = np.array([y[0], y[-1]]).reshape(-1, 1)
+gp.fit(x_fit, y_fit)
+
+REV_POINT = [4.5, 1.3]
+MAX_AREA = REV_POINT[0] * REV_POINT[1]
 
 
 def vector_mult(vector1, vector2):
@@ -81,7 +91,8 @@ def intersection_segments(points):
 
     for i, vector1 in enumerate(vectors):
         for j in range(i + 1, num_of_vectors):
-            if not nessecary_cond(vector1,vectors[j]):  # if nessecary cond is not success then vectors are not intersection
+            if not nessecary_cond(vector1,
+                                  vectors[j]):  # if nessecary cond is not success then vectors are not intersection
                 continue
             else:
                 if sufficient_cond(vector1, vectors[j]):
@@ -93,31 +104,33 @@ def intersection_segments(points):
 
 
 def distance_to_vector(vector):
-    target = TARGET
-    ts_X = [X[target[0], target[1]]]
-    ts_Y = [Y[target[0], target[1]]]
-    dist = []
+    D = []
+    for target in TARGET:
+        ts_X = [X[target[0], target[1]]]
+        ts_Y = [Y[target[0], target[1]]]
+        dist = []
 
-    for x, y in zip(ts_X, ts_Y):
-        v = [vector[2] - vector[0], vector[3] - vector[1]]
-        w0 = [x - vector[0], y - vector[1]]
-        w1 = [x - vector[2], y - vector[3]]
+        for x, y in zip(ts_X, ts_Y):
+            v = [vector[2] - vector[0], vector[3] - vector[1]]
+            w0 = [x - vector[0], y - vector[1]]
+            w1 = [x - vector[2], y - vector[3]]
 
-        w0_v = np.dot(w0, v)
-        w1_v = np.dot(w1, v)
-        if w0_v < 0:
-            dist.append(euclid_norm(np.array([x, y]) - np.array([vector[0], vector[1]])))
-        elif w1_v > 0:
-            dist.append(euclid_norm(np.array([x, y]) - np.array([vector[2], vector[3]])))
-        else:
-            x1 = v[0]
-            y1 = v[1]
-            x2 = w0[0]
-            y2 = w0[1]
-            mod = np.sqrt(x1 * x1 + y1 * y1)
-            dist.append(abs(x1 * y2 - y1 * x2) / mod)
+            w0_v = np.dot(w0, v)
+            w1_v = np.dot(w1, v)
+            if w0_v < 0:
+                dist.append(euclid_norm(np.array([x, y]) - np.array([vector[0], vector[1]])))
+            elif w1_v > 0:
+                dist.append(euclid_norm(np.array([x, y]) - np.array([vector[2], vector[3]])))
+            else:
+                x1 = v[0]
+                y1 = v[1]
+                x2 = w0[0]
+                y2 = w0[1]
+                mod = np.sqrt(x1 * x1 + y1 * y1)
+                dist.append(abs(x1 * y2 - y1 * x2) / mod)
+        D.append(dist)
 
-    return dist
+    return D
 
 
 def point_on_curve(points):
@@ -134,10 +147,11 @@ def point_on_curve(points):
         second += 2
 
     for vector in vectors:
-        dist = distance_to_vector(vector)
-        check_constr = list(d <= fixed for d in dist)
-        if any(check_constr):
-            return 1
+        D = distance_to_vector(vector)
+        for dist in D:
+            check_constr = list(d <= fixed for d in dist)
+            if any(check_constr):
+                return 1
 
     return 0
 
@@ -188,6 +202,7 @@ def bw_length(points):
 
     return 0
 
+
 def intersection_breakwaters(individ):
     vectors_individ = []
 
@@ -217,9 +232,9 @@ def intersection_breakwaters(individ):
 
 
 def domain_limits(points):
-    V = [V1_PROH_AREA, V2_PROH_AREA]
-    domain = [[570, 1480],  # x-axis
-              [200, 1100]]
+    V = V_PROH_AREA
+    domain = DOMAIN
+
     X = points[::2]
     Y = points[1:][::2]
 
@@ -227,6 +242,11 @@ def domain_limits(points):
         if x < domain[0][0] or x > domain[0][1]:
             return 1
         elif y < domain[1][0] or y > domain[1][1]:
+            return 1
+
+    for x, y in zip(X, Y):
+        y_check = gp.predict(np.array([x]).reshape(-1, 1))
+        if y_check >= y:
             return 1
 
     vectors = []
@@ -256,10 +276,12 @@ def check_constraints(individ):
     constr = []
     if len(individ) > 1:
         for points in individ:
-            constr.append(bw_length(points) or distance_between_vectors(points) or point_on_curve(points) or intersection_segments(points) or domain_limits(points))
+            constr.append(bw_length(points) or distance_between_vectors(points) or point_on_curve(
+                points) or intersection_segments(points) or domain_limits(points))
         constr.append(intersection_breakwaters(individ))
 
     elif len(individ) == 1:
-        constr.append(bw_length(individ[0]) or distance_between_vectors(individ[0]) or point_on_curve(individ[0]) or intersection_segments(individ[0]) or domain_limits(individ[0]))
+        constr.append(bw_length(individ[0]) or distance_between_vectors(individ[0]) or point_on_curve(
+            individ[0]) or intersection_segments(individ[0]) or domain_limits(individ[0]))
 
     return any(constr)

@@ -1,14 +1,15 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import random
-import copy
-import subprocess
+import constraints
 from numpy.linalg import norm as euclid_norm
 from constraints import check_constraints
-from SWAN_modeling import hs_modeling, surrogate_modeling, modeling
 from shapely import affinity
 from shapely.geometry import LineString
-from visualization import example_create
+from pymoo.factory import get_performance_indicator
+
+MAX_AREA = constraints.MAX_AREA
+REV_POINT = constraints.REV_POINT
+TARGET = constraints.TARGET
 
 
 class SPEA2_optimizer:
@@ -38,6 +39,7 @@ class SPEA2_optimizer:
         self.min_segm = 1
         self.min_bw = 1
         self.max_bw = 3
+        self.history = {}
 
     def objectives_calc(self, idx, type_of_pop):
         number_of_objectives = len(self.functions_to_optimize)
@@ -112,7 +114,7 @@ class SPEA2_optimizer:
     def density(self, population, type_of_pop):
         size_of_pop = len(population)
         dens_pop = []
-        k = 1
+        k = 0
 
         if type_of_pop == 'arch':
             f1 = self.functions_to_optimize[0]
@@ -152,7 +154,7 @@ class SPEA2_optimizer:
 
         return idx_no_dublicates
 
-    def environmental_selection(self, union_pop, union_fit, union_hs):
+    def environmental_selection(self, union_pop, union_fit, union_hs, size):
         idx_no_dubl = self.remove_dublicates(union_hs)
         union_pop = [union_pop[idx] for idx in idx_no_dubl]
         union_fit = [union_fit[idx] for idx in idx_no_dubl]
@@ -166,8 +168,8 @@ class SPEA2_optimizer:
         new_arch_len = len(new_arch_pop)
         difference = int(abs(new_arch_len - self.arch_size))
 
-        if new_arch_len > self.arch_size:
-            k = 1
+        if new_arch_len > size:
+            k = 0
 
             idx_for_delete = []
             distance_and_idx = []
@@ -188,7 +190,7 @@ class SPEA2_optimizer:
 
             arch_idx_selected = [idx for idx in arch_idx_selected if idx not in idx_for_delete]
 
-        elif new_arch_len < self.arch_size:
+        elif new_arch_len < size:
             fit_with_idx = [(individ_fit, i) for i, individ_fit in enumerate(union_fit)]
             union_sorted = sorted(fit_with_idx)
 
@@ -237,7 +239,7 @@ class SPEA2_optimizer:
             new_lost1 = ind_new1 + losted1
             new_lost2 = ind_new2 + losted2
 
-            if not(check_constraints(new_lost1) or check_constraints(new_lost2)):
+            if not (check_constraints(new_lost1) or check_constraints(new_lost2)):
                 out1 = new_lost1
                 out2 = new_lost2
                 break
@@ -258,7 +260,7 @@ class SPEA2_optimizer:
 
             out1, out2 = self.point_crossover(ind1, ind2, [losted1, losted2])
 
-            if not(check_constraints(out1) or check_constraints(out2)):
+            if not (check_constraints(out1) or check_constraints(out2)):
                 break
 
         if check_constraints(out1) or check_constraints(out2):
@@ -266,32 +268,6 @@ class SPEA2_optimizer:
 
         else:
             return [out1, out2]
-
-    """
-    def middle_crossover(self, pair):
-        individ1 = pair[0]
-        individ2 = pair[1]
-        out1, out2 = [], []
-
-        ind_more_one_segments1 = [ind for ind in individ1 if int((len(ind) - 2) / 2) > 1]
-        ind_more_one_segments2 = [ind for ind in individ2 if int((len(ind) - 2) / 2) > 1]
-
-        if len(ind_more_one_segments1) == 0 or len(ind_more_one_segments2) == 0 :
-            out1, out2 = self.lower_crossover(pair)
-
-        else:
-            losted1 = [ind for ind in individ1 if ind not in ind_more_one_segments1]
-            losted2 = [ind for ind in individ2 if ind not in ind_more_one_segments2]
-            for ind1 in ind_more_one_segments1:
-                for ind2 in ind_more_one_segments2:
-
-
-
-        if constraints(out1) or constraints(out2):
-            out1, out2 = self.lower_crossover(pair)
-
-        return [out1, out2]
-    """
 
     def upper_crossover(self, pair):
         individ1 = pair[0]
@@ -477,7 +453,7 @@ class SPEA2_optimizer:
         return new_individ
 
     def lower_mutation(self, individ):
-        lower_num_mutation = 2  # количество операторов мутации на верхнем уровне
+        lower_num_mutation = 2
         mutat_case = random.randint(1, lower_num_mutation)
 
         if mutat_case == 1:
@@ -546,44 +522,91 @@ class SPEA2_optimizer:
             individ = [self.create_breakwater(random.randint(self.min_segm, self.max_segm)) for _ in
                        range(number_of_bw)]
             while check_constraints(individ):
-                individ = [self.create_breakwater(random.randint(self.min_segm, self.max_segm)) for _ in range(number_of_bw)]
+                individ = [self.create_breakwater(random.randint(self.min_segm, self.max_segm)) for _ in
+                           range(number_of_bw)]
             population.append(individ)
 
         return population
 
+    def get_hypervolume(self, pop, hs_pop):
+        hv = get_performance_indicator("hv", ref_point=REV_POINT)
+        cost_pop = [self.functions_to_optimize[0](ind) for ind in pop]
+        cost_hs = np.array([[cost, hs] for cost, hs in zip(cost_pop, hs_pop)])
+        hv = MAX_AREA - hv.do(cost_hs)
 
-    def unique_add(self, individs):
-        unique_individs = [ind for ind in individs if ind not in self.archive]
-        _, hs_individs, counter_SWAN = hs_modeling(unique_individs)
+        return hv
 
-        return unique_individs, hs_individs, counter_SWAN
+    def unique_add(self, individs, new_hs, real):
+        unique_individs_idx = [i for i, ind in enumerate(individs) if ind not in self.archive]
+        if len(unique_individs_idx) == 0:
+            return None
 
+        unique_individs = [individs[ind] for ind in unique_individs_idx]
+        _, hs_individs, counter_SWAN = real(unique_individs)
 
-    def optimize(self, init_pop, func_to_optimize, type_modeling):
-        Z_for_exp = []
-        pop_for_exp = []
-        HS = []
+        for i, ind in enumerate(unique_individs_idx):
+            if new_hs[ind] == hs_individs[i]:
+                counter_SWAN -= 1
+            new_hs[ind] = hs_individs[i]
 
+        return [unique_individs, hs_individs, counter_SWAN, new_hs]
+
+    def history_update(self,
+                       pop,
+                       hs_pop,
+                       RealModel,
+                       counter_SWAN):
+
+        item = len(self.history)
+        cost_pop = [self.functions_to_optimize[0](ind) for ind in pop]
+        hv = self.get_hypervolume(pop, hs_pop)
+        Z_pop, hs_pop, _ = RealModel(pop)
+
+        dict_to_add = {'pop': pop,
+                       'hs_pop': hs_pop,
+                       'Z_pop': Z_pop,
+                       'cost_pop': cost_pop,
+                       'hv': hv,
+                       'swan_num': counter_SWAN}
+
+        self.history.update({item: dict_to_add})
+
+    def optimize(self, func_to_optimize,
+                 max_real_num_call,
+                 surr,
+                 real,
+                 exploration_phase=True,
+                 pretrained=True):
+
+        # Initialization phase
         self.functions_to_optimize = func_to_optimize
-        self.population = init_pop
-        #self.archive = []
-        self.archive = [[[1176, 539, 735, 828]], [[1176, 539, 735, 828], [768, 666, 1070, 321]], [[1176, 560, 850, 747], [768, 666, 1070, 321]], [[1155, 742, 953, 691]], [[1073, 674, 850, 747]], [[1176, 560, 850, 747]], [[953, 742, 1156, 709]], [[1176, 539, 626, 872]], [[1053, 842, 879, 949]], [[1073, 674, 855, 760]], [[845, 742, 1156, 709]], [[1060, 750, 844, 782]], [[1420, 827, 1284, 680]], [[909, 721, 735, 828]], [[953, 742, 1156, 692]], [[1073, 674, 735, 828]], [[845, 742, 1156, 709], [768, 666, 1070, 321]], [[1176, 560, 850, 747, 1198, 644], [768, 666, 1070, 321]], [[968, 704, 626, 872, 1221, 644], [892, 404, 585, 744]], [[968, 704, 626, 872, 1221, 644], [864, 382, 613, 766]]]
-        _, self.hs_pop, counter_SWAN = hs_modeling(self.population)
-        _, self.hs_arch, counter_SWAN = hs_modeling(self.archive)
+        self.population = self.initialize_population()
+        self.Z_pop, self.hs_pop, counter_SWAN = real(self.population)
+        self.archive = []
 
-        #Z_for_exp += Z
-        #pop_for_exp += self.population
-        counter_SWAN = 653
+        # Exploration phase
+        if exploration_phase:
+            self.Z_pop, self.hs_pop, counter_SWAN = real(self.population)
+            pop_fit = self.fitness(self.population, 'union')
+            self.population, self.hs_pop = self.environmental_selection(self.population,
+                                                                        pop_fit,
+                                                                        self.hs_pop,
+                                                                        self.pop_size)
+            surr.preparation(self.population,
+                             self.hs_pop,
+                             self.Z_pop,
+                             pretrained=pretrained)
 
-        arch_counter = []
-        #arch_counter.append((self.population, counter_SWAN))
+        self.history_update(self.population,
+                            self.hs_pop,
+                            real,
+                            counter_SWAN)
 
-        number = 10
         border = counter_SWAN + self.pop_size
         it = 0
 
-        arch_history = []
-        while len(arch_counter) != number:
+        # Exploitation phase
+        while counter_SWAN <= max_real_num_call:
             print('Swan calc = ' + str(counter_SWAN))
             print('ITER = ' + str(it))
 
@@ -591,30 +614,42 @@ class SPEA2_optimizer:
             union_fit = self.fitness(union_pop, 'union')
             union_hs = self.hs_pop + self.hs_arch
 
-            individs_to_add, _ = self.environmental_selection(union_pop, union_fit, union_hs)
-            unique_individs, hs_individs, counter = self.unique_add(individs_to_add)
-
-
-
-            arch_history.append(self.archive)
-
-            if counter_SWAN >= border:
-                arch_counter.append((self.archive, counter_SWAN))
-                border += self.pop_size
+            if surr.state:
+                new_arch, new_hs = self.environmental_selection(union_pop,
+                                                                union_fit,
+                                                                union_hs,
+                                                                self.arch_size)
+                out = self.unique_add(new_arch, new_hs, real)
+                if out:
+                    self.population, self.hs_pop, counter = out[0], out[1], out[2]
+                    union_pop_add = self.population + self.archive
+                    union_fit_add = self.fitness(union_pop_add, 'union')
+                    union_hs_add = self.hs_pop + self.hs_arch
+                    self.archive, self.hs_arch = self.environmental_selection(union_pop_add,
+                                                                              union_fit_add,
+                                                                              union_hs_add,
+                                                                              self.arch_size)
+                    Model = surr
+                    counter_SWAN += counter
+            else:
+                self.archive, self.hs_arch = self.environmental_selection(union_pop,
+                                                                          union_fit,
+                                                                          union_hs,
+                                                                          self.arch_size)
+                Model = real
 
             mating_pool = union_pop
             self.population = self.variation(mating_pool, union_fit)
-            _, self.hs_pop, counter = type_modeling(self.population)
-
-            #Z_for_exp += Z
-            #pop_for_exp += self.population
+            self.Z_pop, self.hs_pop, counter = Model(self.population)
 
             counter_SWAN += counter
             it += 1
 
-        #_ = [example_create(Z_for_exp[i], pop_for_exp[i], i, label=True) for i, __ in enumerate(Z_for_exp)]
-        #_ = [example_create(Z_for_exp[i], pop_for_exp[i], i, label=False) for i, __ in enumerate(Z_for_exp)]
+            if counter_SWAN >= border:
+                self.history_update(self.archive,
+                                    self.hs_arch,
+                                    real,
+                                    counter_SWAN)
+                border += self.pop_size
 
-        #HS = [Z_for_exp[i][23,40] for i in range(len(Z_for_exp))]
-
-        return self.archive, arch_counter, it, self.population, HS
+        return self.history
