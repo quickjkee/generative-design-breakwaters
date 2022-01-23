@@ -14,7 +14,7 @@ y = np.linspace(0, 1450, 59)
 X, Y = np.meshgrid(x, y)
 DOMAIN = [[x[0], x[-1]],
           [y[0], y[-1]]]
-Z = ((X + 25) * (Y + 10) / (32 * (X + Y + 50)) + 25) / 4
+Z = np.loadtxt('swan/bathymetry/port_not_bathy_25m_vobst_exp.bot')
 V_PROH_AREA = [[1000, 100, 700, 600], [700, 600, 800, 800], [1900, 540, 1750, 1000]]
 
 gp = make_pipeline(PolynomialFeatures(3), Ridge(alpha=1e-1))

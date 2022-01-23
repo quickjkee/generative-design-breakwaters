@@ -12,7 +12,7 @@ X, Y = np.meshgrid(x, y)
 Z = constraints.Z
 
 
-def plot_map(X, Y, Z, individ, type, j, i):
+def plot_map(X, Y, Z, individ, ax = plt):
     """
     for swan input need 1450 - y1, 1450 - y2
 
@@ -44,48 +44,39 @@ def plot_map(X, Y, Z, individ, type, j, i):
         Z_new.append(z_new)
     Z_new = np.array(Z_new)
 
-    plt.pcolormesh(X, Y, Z_new, cmap=custom_map, shading='auto')
-    plt.colorbar()
-    plt.scatter(X[TARGET[0][0], TARGET[0][1]], Y[TARGET[0][0], TARGET[0][1]], marker='s', s=20, color='green')
-    plt.scatter(X[TARGET[1][0], TARGET[1][1]], Y[TARGET[1][0], TARGET[1][1]], marker='s', s=20, color='green',
-                label='WH=' + str(
+    ax.pcolormesh(X, Y, Z_new, cmap=custom_map, shading='auto')
+    
+    ax.scatter(X[TARGET[0][0], TARGET[0][1]], Y[TARGET[0][0], TARGET[0][1]], marker='s', s=20, color='green')
+    ax.scatter(X[TARGET[1][0], TARGET[1][1]], Y[TARGET[1][0], TARGET[1][1]], marker='s', s=20, color='green',
+                label='target=' + str(
                     round((Z_new[TARGET[0][0], TARGET[0][1]] + Z_new[TARGET[1][0], TARGET[1][1]]) / 2, 3)))
 
-    plt.plot([1000, 700, 800], [100, 600, 800], color='black', linewidth=4)
-    plt.plot([1900, 1750], [540, 1000], color='black', linewidth=4)
+    ax.plot([1000, 700, 800], [100, 600, 800], color='black', linewidth=4, label='fixed bw')
+    ax.plot([1900, 1750], [540, 1000], color='black', linewidth=4)
 
     label = True
     for line_X, line_Y in zip(lines_X, lines_Y):
         if label:
-            plt.plot(line_X,
+            ax.plot(line_X,
                      line_Y,
                      color='blue',
                      linewidth=2,
                      label='breakwater',
                      marker='o')
         else:
-            plt.plot(line_X,
+            ax.plot(line_X,
                      line_Y,
                      color='blue',
                      linewidth=2,
                      marker='o')
         label = False
 
-    plt.axis('off')
+    ax.axis('off')
 
-    plt.xlim(0, 2075)
-    plt.ylim(0, 1450)
+    ax.axis(xmin=0, xmax=2075)
+    ax.axis(ymin=0, ymax=1450)  
 
-    plt.legend(fontsize=9)
-
-    if type == 'cnn':
-        plt.savefig('exp_results/HV/3k_data_30/CNN_images/' + str(j + 1) + '/' + str(i) + '.pdf', bbox_inches='tight',
-                    pad_inches=0)
-        plt.close('all')
-    elif type == 'swan':
-        plt.savefig('exp_results/HV/3k_data_30/SWAN_images/' + str(j + 1) + '/' + str(i) + '.pdf', bbox_inches='tight',
-                    pad_inches=0)
-        plt.close('all')
+    ax.legend(fontsize=9)
 
 
 def example_create(Z, individ, i, label=False):

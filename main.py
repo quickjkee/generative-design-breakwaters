@@ -5,11 +5,11 @@ import pickle
 from spea2 import SPEA2_optimizer
 from models.get_models import Surrogate, RealModel
 from models.surrogate_models import deep_conv_net, assistant_net
-from funcs import cost, wave_h
+from objectives import cost, wave_h
 
 
 def save_experimental_data(data):
-    save_file = open("exp_results/data.pkl", "wb")
+    save_file = open("results/data.pkl", "wb")
     pickle.dump(data, save_file)
     save_file.close()
 
